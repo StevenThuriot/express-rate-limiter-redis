@@ -1,4 +1,4 @@
-#Express Rate Limiter - Redis
+Express Rate Limiter - Redis
 =============================
 
 <!--
