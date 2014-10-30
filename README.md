@@ -13,6 +13,9 @@ The inner limit is against hammering (e.g. only 3 calls allowed per second). The
 
 # Usage
 
+_note: This package is not on npm just yet, I've only prepared this readme for the future. First, I want to solve [issue #1](/../../issues/1) ._
+
+
 Install
 
 ```
