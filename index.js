@@ -78,7 +78,7 @@ RedisStore.prototype.update = function (key, value, resetInner, callback) {
     multi.set(key, JSON.stringify(value))
          .decr(key + "_outer"); //Todo: special scenario, this might reset
     
-    if (resetInner){        
+    if (resetInner === true){        
         multi.set(key + "_inner", value.inner);
     } else {
         multi.decr(key + "_inner");
