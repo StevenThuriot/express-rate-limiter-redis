@@ -35,17 +35,25 @@ var Store = require('express-rate-limiter/store');
 RedisStore.prototype = Object.create(Store.prototype);
 
 RedisStore.prototype.get = function (key, callback) {
-    this.__client.get(key, function (err, data) {
+    var multi = this.__client.multi();
+    
+    multi.get(key)
+         .get(key + "_inner")
+         .get(key + "_outer");
+        
+    multi.exec(function (err, replies) {
         if (err) {
             callback(err, undefined);
         } else {
             var result;
 
-            if (data) {
-                result = JSON.parse(data);
+            if (replies) {                
+                result = JSON.parse(data[0]);
+                result.inner = data[1]; //Due to race conditions, these are more reliable than the ones on the JSON string.
+                result.outer = data[2];
             }
 
-            callback(err, data);
+            callback(err, result);
         }
     });
 };
@@ -54,7 +62,9 @@ RedisStore.prototype.create = function (key, value, lifetime, callback) {
     var multi = this.__client.multi();
 
     multi.set(key, JSON.stringify(value))
-        .expire(key, lifetime);
+         .set(key + "_inner", value.inner)
+         .set(key + "_outer", value.outer)
+         .expire(key, lifetime);
 
     multi.exec(function (err, data) {
         callback(err, value);
@@ -62,8 +72,26 @@ RedisStore.prototype.create = function (key, value, lifetime, callback) {
 };
 
 
-RedisStore.prototype.update = function (key, value, callback) {
-    this.__client.set(key, JSON.stringify(value), function (err, data) {
+RedisStore.prototype.update = function (key, value, resetInner, callback) {
+    var multi = this.__client.multi();
+    
+    multi.set(key, JSON.stringify(value))
+         .decr(key + "_outer"); //Todo: special scenario, this might reset
+    
+    if (resetInner){        
+        multi.set(key + "_inner", value.inner);
+    } else {
+        multi.decr(key + "_inner");
+    }
+        
+
+    multi.exec(function (err, replies) {
+        value.outer = data[1];//Due to race conditions, these are more reliable than the ones on the JSON string.
+        
+        if (resetInner) {
+            value.inner = data[2];
+        }
+        
         callback(err, value);
     });
 };
