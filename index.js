@@ -36,21 +36,22 @@ RedisStore.prototype = Object.create(Store.prototype);
 
 RedisStore.prototype.get = function (key, callback) {
     var multi = this.__client.multi();
-    
+
     multi.get(key)
-         .get(key + "_inner")
-         .get(key + "_outer");
-        
+         .get(key + "_outer")
+         .get(key + "_inner");
+
     multi.exec(function (err, replies) {
         if (err) {
             callback(err, undefined);
         } else {
             var result;
 
-            if (replies) {                
-                result = JSON.parse(data[0]);
-                result.inner = data[1]; //Due to race conditions, these are more reliable than the ones on the JSON string.
-                result.outer = data[2];
+            if (replies) {
+                result = JSON.parse(replies[0]);
+                //Due to race conditions, these are more reliable than the ones on the JSON string.
+                result.outer = replies[1];
+                result.inner = replies[2]; 
             }
 
             callback(err, result);
@@ -62,36 +63,33 @@ RedisStore.prototype.create = function (key, value, lifetime, callback) {
     var multi = this.__client.multi();
 
     multi.set(key, JSON.stringify(value))
-         .set(key + "_inner", value.inner)
-         .set(key + "_outer", value.outer)
-         .expire(key, lifetime);
+        .set(key + "_outer", value.outer)
+        .set(key + "_inner", value.inner)
+        .expire(key, lifetime);
 
     multi.exec(function (err, data) {
         callback(err, value);
     });
 };
 
-
-RedisStore.prototype.update = function (key, value, resetInner, callback) {
+MemoryStore.prototype.decreaseLimits = function (ip, value, resetInner, configuration, callback) {
     var multi = this.__client.multi();
-    
+
     multi.set(key, JSON.stringify(value))
-         .decr(key + "_outer"); //Todo: special scenario, this might reset
-    
-    if (resetInner === true){        
-        multi.set(key + "_inner", value.inner);
+         .decr(key + "_outer");
+
+    if (resetInner === true) {
+        multi.set(key + "_inner", configuration.innerLimit);
     } else {
         multi.decr(key + "_inner");
     }
-        
 
-    multi.exec(function (err, replies) {
-        value.outer = data[1];//Due to race conditions, these are more reliable than the ones on the JSON string.
-        
-        if (resetInner) {
+    multi.exec(function (err, data) {
+        if (!err && data) {
+            value.outer = data[1];
             value.inner = data[2];
         }
-        
+
         callback(err, value);
     });
 };
