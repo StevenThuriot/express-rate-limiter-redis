@@ -31,7 +31,7 @@ var RedisStore = module.exports = function (options) {
 
 }
 
-var Store = require('express-rate-limiter/store');
+var Store = require('express-rate-limiter/lib/store');
 RedisStore.prototype = Object.create(Store.prototype);
 
 RedisStore.prototype.get = function (key, callback) {
