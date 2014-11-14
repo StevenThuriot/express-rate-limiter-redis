@@ -15,17 +15,31 @@ var RedisStore = module.exports = function (options) {
                 configuration[key] = options[key];
             }
 
-            if (key != 'host' && key != 'port') {
+            if (key != 'host' && key != 'port' && key != 'url') {
                 redisOptions[key] = configuration[key];
             }
         }
 
         var Redis = require('redis');
 
-        this.__client = Redis.createClient(configuration.host, configuration.port, redisOptions);
+        if (configuration.url) {
+            var redisURL = require('url').parse(configuration.url);
+
+            this.__client = Redis.createClient(redisURL.port, redisURL.hostname, redisOptions);
+
+            if (redisURL.auth) {
+                this.__client.auth(redisURL.auth.split(":")[1]);
+            }
+
+        } else {
+            this.__client = Redis.createClient(configuration.port, configuration.host, redisOptions);
+        }
+
+
     }
 
-    this.__client.on("error", function (err) {
+    var client = this.__client;
+    client.on("error", function (err) {
         console.log("redis error event - " + client.host + ":" + client.port + " - " + err);
     });
 
@@ -34,93 +48,123 @@ var RedisStore = module.exports = function (options) {
 var Store = require('express-rate-limiter/lib/store');
 RedisStore.prototype = Object.create(Store.prototype);
 
-RedisStore.prototype.__arrayIsValid = function (arr) {
-    if (!arr) return false;
+RedisStore.prototype.auth = function (value) {
+    this.__client.auth(value);
+};
 
-    for (var i = 0; i < arr.length; i++) {
-        var value = arr[i];
-        if (value === undefined || value === null)
-            return false;
-    }
-
-    return true;
-}
-
-RedisStore.prototype.get = function (key, callback) {
+RedisStore.prototype.get = function (key, callback, configuration) {
     var multi = this.__client.multi();
 
-    multi.get(key)
-        .get(key + "_outer")
-        .get(key + "_inner");
+    this.__client.ttl(key, function (err, ttl) {
 
-    var self = this;
-    multi.exec(function (err, replies) {
         if (err) {
             callback(err, undefined);
-        } else {
-            var result;
+            return;
+        }
 
-            if (self.__arrayIsValid(replies)) {
-                result = JSON.parse(replies[0]);
-                //Due to race conditions, these are more reliable than the ones on the JSON string.
-                if (replies[1]) {
-                    result.outer = replies[1];
+        if (ttl == 0 || ttl == -1) {
+            multi.del(key)
+                .del(key + "_outer")
+                .del(key + "_inner");
+
+            multi.exec(function (err) {
+                callback(err, undefined);
+            });
+
+            return;
+        }
+
+        multi.get(key)
+            .get(key + "_outer")
+            .get(key + "_inner");
+
+        multi.exec(function (err, replies) {
+            if (err) {
+                callback(err, undefined);
+            } else {
+                var result;
+
+                if (replies) {
+                    var jsonString = replies[0];
+
+                    if (jsonString) {
+                        result = JSON.parse(jsonString);
+                        //Due to race conditions, these are more reliable than the ones on the JSON string.
+                        result.outer = replies[1] || configuration.outerLimit;
+                        result.inner = replies[2] || configuration.innerLimit;
+                    }
                 }
-                if (replies[2]) {
-                    result.inner = replies[2];
-                }
+
+                callback(err, result);
             }
+        });
+    });
+};
 
-            callback(err, result);
+RedisStore.prototype.create = function (key, value, configuration, callback) {
+    var client = this.__client;
+    var multi = client.multi();
+
+    multi.set(key, JSON.stringify(value))
+        .set(key + "_outer", value.outer)
+        .set(key + "_inner", value.inner);
+
+    multi.exec(function (err) {
+        if (err) {
+            callback(err, value);
+        } else {
+            var multi2 = client.multi();
+
+            var expiration = Math.round(configuration.outerTimeLimit / 1000);
+            var innerExpiration = Math.round(configuration.innerTimeLimit / 1000);
+
+            multi2.expire(key, expiration)
+                .expire(key + "_outer", expiration);
+
+            multi2.exec(function (err2) {
+                callback(err2, value);
+            });
         }
     });
 };
 
-RedisStore.prototype.create = function (key, value, lifetime, callback) {
-    var multi = this.__client.multi();
-
-    var expiration = lifetime / 1000;
-
-    multi.set(key, JSON.stringify(value))
-        .set(key + "_outer", value.outer)
-        .set(key + "_inner", value.inner)
-        .expire(key, expiration)
-        .expire(key + "_outer", expiration)
-        .expire(key + "_inner", expiration);
-
-    multi.exec(function (err, data) {
-        callback(err, value);
-    });
-};
-
 RedisStore.prototype.decreaseLimits = function (key, value, resetInner, configuration, callback) {
-    var multi = this.__client.multi();
+    var client = this.__client;
+    var multi = client.multi();
 
     multi.set(key, JSON.stringify(value))
         .decr(key + "_outer");
 
     if (resetInner === true) {
-        var expiration = configuration.outerTimeLimit / 1000;
-
-        multi.set(key + "_inner", configuration.innerLimit)
-             .expire(key + "_inner", expiration);
+        multi.set(key + "_inner", configuration.innerLimit);
     } else {
         multi.decr(key + "_inner");
     }
 
-
-    var self = this;
     multi.exec(function (err, data) {
-        if (!err && self.__arrayIsValid(data)) {
-            value.outer = data[1];
+        if (!err && data) {
+            var outerLimit = +data[1];
+            value.outer = outerLimit;
 
             if (resetInner === true) {
                 value.inner = configuration.innerLimit;
             } else {
-                value.inner = data[2];
+                var innerLimit = +data[2];
+                value.inner = innerLimit;
             }
-        }
 
-        callback(err, value);
+            var expiration = Math.round((value.firstDate + configuration.outerTimeLimit - Date.now()) / 1000);
+            var innerExpiration = Math.round(configuration.innerTimeLimit / 1000);
+
+            var multi2 = client.multi();
+            multi2.expire(key, expiration)
+                  .expire(key + "_outer", expiration);
+
+            multi2.exec(function (err2) {
+                callback(err2, value);
+            });
+        } else {
+            callback(err, value);
+        }
     });
 };

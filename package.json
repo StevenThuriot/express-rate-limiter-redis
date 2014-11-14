@@ -25,7 +25,7 @@
   },
   "homepage": "https://github.com/steventhuriot/express-rate-limiter-redis",
   "dependencies": {
-    "express-rate-limiter": "*",
+    "express-rate-limiter": "^1.0.0",
     "redis": "*"
   }
 }
