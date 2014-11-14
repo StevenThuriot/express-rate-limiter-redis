@@ -35,6 +35,16 @@ var store = new RedisStore({
 });
 ```
 
+Or when you have a url:
+
+```javascript
+var store = new RedisStore({
+    url: 'redis://127.0.0.1:6379'
+});
+```
+
+In case the url contains auth data, the client will automatically authenticate.
+
 Instead of passing along options, it is also possible to pass a different redis store (or mock) with the same signature:
 
 ```javascript
