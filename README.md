@@ -68,6 +68,16 @@ app.post('/', limiter.middleware(), function(req, res) {
 
 Anything written in the callback will now be rate limited.
 
+Since the connection to the redis server causes an asynchronous overhead, it is recommended to increase the inner expiration time. Leaving it on it's default, `3 seconds`, will result in possible race conditions that can't be avoided. This can be configured as follows:
+
+```javascript
+    var limiter = new Limiter({
+        db: redisStore,
+        innerTimeLimit: 10000,
+        innerLimit: 15
+    });
+```
+
 
 # More info
 For more info, see [expres-rate-limiter](https://github.com/StevenThuriot/express-rate-limiter).
