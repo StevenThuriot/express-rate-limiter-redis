@@ -169,12 +169,12 @@ RedisStore.prototype.decreaseLimits = function (key, value, resetInner, configur
                 value.inner = innerLimit;
             }
 
-            var expiration = Math.round((value.firstDate + configuration.outerTimeLimit - Date.now()) / 1000);
+            var expiration = Math.round((value.firstDate + configuration.outerTimeLimit - value.date) / 1000);
 
             var innerExpiration = Math.ceil(configuration.innerTimeLimit / 1000);
 
             var innerRemaining = data[3];
-            if (innerRemaining > 0) {
+            if (resetInner !== true && innerRemaining > 0) {
                 innerExpiration -= innerRemaining;
             }
 
