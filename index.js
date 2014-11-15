@@ -53,14 +53,21 @@ RedisStore.prototype.auth = function (value) {
 };
 
 RedisStore.prototype.get = function (key, callback, configuration) {
-    var multi = this.__client.multi();
+    var client = this.__client;
 
-    this.__client.ttl(key, function (err, ttl) {
+    var ttlMulti = client.multi()
+        .ttl(key)
+        .ttl(key + "_inner");
 
+    ttlMulti.exec(function (err, data) {
         if (err) {
             callback(err, undefined);
             return;
         }
+
+        var ttl = data[0];
+
+        var multi = client.multi();
 
         if (ttl == 0 || ttl == -1) {
             multi.del(key)
@@ -73,6 +80,8 @@ RedisStore.prototype.get = function (key, callback, configuration) {
 
             return;
         }
+
+        var resetInner = data[1] <= 0;
 
         multi.get(key)
             .get(key + "_outer")
@@ -91,7 +100,12 @@ RedisStore.prototype.get = function (key, callback, configuration) {
                         result = JSON.parse(jsonString);
                         //Due to race conditions, these are more reliable than the ones on the JSON string.
                         result.outer = replies[1] || configuration.outerLimit;
-                        result.inner = replies[2] || configuration.innerLimit;
+
+                        if (resetInner) {
+                            result.inner = configuration.innerLimit;
+                        } else {
+                            result.inner = replies[2] || configuration.innerLimit;
+                        }
                     }
                 }
 
@@ -141,6 +155,8 @@ RedisStore.prototype.decreaseLimits = function (key, value, resetInner, configur
         multi.decr(key + "_inner");
     }
 
+    multi.ttl(key + "_inner");
+
     multi.exec(function (err, data) {
         if (!err && data) {
             var outerLimit = +data[1];
@@ -154,11 +170,18 @@ RedisStore.prototype.decreaseLimits = function (key, value, resetInner, configur
             }
 
             var expiration = Math.round((value.firstDate + configuration.outerTimeLimit - Date.now()) / 1000);
-            var innerExpiration = Math.round(configuration.innerTimeLimit / 1000);
+
+            var innerExpiration = Math.ceil(configuration.innerTimeLimit / 1000);
+
+            var innerRemaining = data[3];
+            if (innerRemaining > 0) {
+                innerExpiration -= innerRemaining;
+            }
 
             var multi2 = client.multi();
             multi2.expire(key, expiration)
-                  .expire(key + "_outer", expiration);
+                .expire(key + "_outer", expiration)
+                .expire(key + "_inner", innerExpiration);
 
             multi2.exec(function (err2) {
                 callback(err2, value);
