@@ -1,6 +1,6 @@
 {
   "name": "express-rate-limiter-redis",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Express Rate Limiter, using Redis as the key value store.",
   "main": "index.js",
   "repository": {
