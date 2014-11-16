@@ -20,7 +20,7 @@ npm install express-rate-limiter-redis --save
 First, create a new Limiter;
 
 ```javascript
-var Limiter = require('express-rate-limiter'),
+var Limiter = require('express-rate-limiter-redis/limiter'), //For easy usage, this redirects to express-rate-limiter (The main module)
     RedisStore = require('express-rate-limiter-redis'),
     store = new RedisStore(),
     limiter = new Limiter({ db : store });
