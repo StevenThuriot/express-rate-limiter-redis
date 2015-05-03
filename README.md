@@ -1,7 +1,7 @@
 [![Express Rate Limiter - Redis](http://img.dafont.com/preview.php?text=Express+Rate+Limiter+Redis&ttf=squared_display0&ext=1&size=64&psize=m&y=53)](https://github.com/StevenThuriot/express-rate-limiter-redis)
 ====================
 
-[![npm](https://img.shields.io/npm/v/express-rate-limiter-redis.svg?style=flat-square)](https://www.npmjs.org/package/express-rate-limiter-redis)[![license](https://img.shields.io/badge/license-Apache%202.0-brightgreen.svg?style=flat-square)](https://www.npmjs.org/package/express-rate-limiter-redis)
+[![npm](https://img.shields.io/npm/v/express-rate-limiter-redis.svg?style=flat-square)](https://www.npmjs.org/package/express-rate-limiter-redis)[![license](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat-square)](https://www.npmjs.org/package/express-rate-limiter-redis)
 
 Rate limiter middleware for express applications, using a redis store as back-end.
 
